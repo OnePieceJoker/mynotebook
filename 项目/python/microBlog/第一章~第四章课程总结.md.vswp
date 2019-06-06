@@ -1,0 +1,347 @@
+vnote_backup_file_826537664 E:/C盘桌面转移/mynotebook/项目/python/microBlog/第一章~第四章课程总结.md
+## 第一章~第四章课程总结
+
+[TOC]
+
+### 第一章 环境的搭建
+>安装Flask
+```
+(venv)$ pip install flask
+```
+>项目构建
+
+创建项目，项目目录名为microbolg，在该目录下创建一个名为app的包，它将托管应用程序。
+创建__init__.py文件。
+```python
+from flask import Flask
+
+app = Flask(__name__)
+
+from app import routes
+```
+该文件的作用是将应用程序对象创建为Flask从flask包导入的类的实例。
+__name__传递给Flask类的变量是Python预定义变量，该变量设置为使用它的模块的名称。当需要加载模块文件等相关资源时，Flask使用此处传递的模块的位置为起点。
+
+__init__.py文件中的**routes**模块的内容是路由处理。在Flask中，应用程序路由的处理程序被编写为Python函数，称为视图函数(view function)。
+
+下面是routes.py里的路由写法(routes.py路径为app/routes.py)
+```python
+from app import app
+
+@app.route('/')
+@app.route('/index')
+def index():
+    return "hello,world"
+```
+函数上面的**@app.route**是装饰器，在作为参数给出的URL和函数之间创建关联。
+
+要完成应用程序，我们还需要再顶层定义一个定义Flask应用程序实例的python脚本。
+
+创建microblog.py文件(路径为microblog/microblog.py)
+```python
+from app import app
+```
+该语句的意思是从app包中导入之前定义好的app变量(app=Flask(__name__))
+
+在运行之前，需要通过设置FLASK_APP环境变量。从版本1.0开始，Flask允许注册在运行flask命令时要自动导入的环境变量。在使用此选项之前，需要安装python-dotenv包
+```
+(venv)$ pip install python-dotenv
+```
+接着，我们可以在项目的顶级目录中创建.flaskenv文件，在其中编写环境变量名称和值
+```
+FLASK_APP=microblog.py
+```
+当前目录结构：
+```
+microblog/
+    app/
+        __init__.py
+        routes.py
+    microblog.py
+    .flaskenv
+```
+
+### 第二章 模板
+模板有助于实现表示和业务逻辑之间的分离。
+我们在app目录下创建tempates目录，并创建一个index.html和通用模板base.html
+>app/templates/index.html
+```html
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>欢迎光临，伟大的{{ user.username }}</h1>
+    {% for post in posts %}
+    <div><p>{{ post.author.username }} 发表了新帖：<b>{{ post.body }}</b></p></div>
+    {% endfor %}
+{% endblock %}
+```
+>app/templates/base.html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    {% if title %}
+    <title>{{ title }} - Microblog</title>
+    {% else %}
+    <title>Welcome to Microblog!</title>
+    {% endif %}
+</head>
+<body>
+    <div>
+        博客： 
+        <a href="{{ url_for('index') }}">首页</a>
+        <a href="{{ url_for('login') }}">登录</a>
+    </div>
+    <hr>
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <ul>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+</body>
+</html>
+```
+使用模板之后，在HTML页面中，我们可以通过{{...}}占位符来替代动态内容。
+
+将模板转换为完整HTML页面的操作称为呈现。通过Flask框架的**render_template()**函数来渲染模板。此函数采用模板文件名和模板参数的变量列表，并返回相同的模板，但其中的所有占位符都替换为实际值。
+
+base.html是相同模板页面，可以在别的页面中使用{% extends "base.html" %}来导入该模板，使用block控制语句来定义派生模板可以插入的位置。
+
+### 第三章 表单的提交
+对于使用Flask框架进行表单的提交，我们需要下载Flask框架的扩展模块**Flask-WTF**
+```
+(venv) $ pip install flask-wtf
+```
+紧接着，我们需要添加唯一配置项来为Flaskj及其一些扩展作为加密密钥，可用于生成签名或令牌。Flask-WTF扩展使用它来保护Web表单免受跨站请求伪造或CSRF的攻击。
+在这里，作者采用了关注点分离原则，单独创建一个python模块来存储配置变量。
+
+在顶级目录下创建config.py模块，用于密钥配置
+> microblog/config.py: 密钥配置
+```python
+import os
+
+class Config(object):
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
+```
+密钥的值被设置为具有两个术语的表达式，由**or**运算符连接。第一个术语查找环境变量的值，也称为**SECRET_KEY**。第二个术语，是一个硬编码字符串。
+
+接下来，我们需要Flask去阅读并应用它。修改之前的__init__.py文件
+>app/__init__.py: Flask配置
+```python
+from flask import Flask
+from config import Config
+
+app = Flask(__name__)
+app.config.from_object(Config)
+
+from app import routes
+```
+Flask-WTF扩展使用python类来表示Web表单。表单类只是将表单的字段定义为类变量。
+这里使用了关注点分离原则。创建一个forms.py模块来存储Web表单类。
+>app/forms.py
+```python
+from flask_wtf import FlaskForm
+from wtforms import StringField, PasswordField, BooleanField, SubmitField
+from wtforms.validators import DataRequired
+
+
+class LoginForm(FlaskForm):
+    # DataRequired验证器只检查字段的提交是否为空
+    username = StringField('Username', validators=[DataRequired()])
+    # 这边是自定义验证器返回结果信息
+    password = PasswordField('Password', validators=
+                             [DataRequired(message='密码不能为空')])
+    remember_me = BooleanField('Remember Me')
+    submit = SubmitField('Sign In')
+```
+用于此表单的字段类型的四个类是直接从WTForms包导入的，因为Flask-WTF扩展不提供自定义版本。对于每个字段，将在类中将对象创建为类变量LoginForm。每个字段都有一个描述或标签作为第一个参数。
+
+validators是在某些字段中看到的可选参数用于将验证行为附加到字段。该DataRequired验证程序只是简单地检查该字段不会提交空。
+
+DataRequired验证器还提供一个message参数，可以指定返回的信息。
+
+创建登录页面模板
+>app/templates/login.html
+```html
+{% extends "base.html" %}
+
+{% block content %}
+    <h1>登录</h1>
+    <form action="" method="post" novalidate>
+        {{ form.hidden_tag() }}
+        <p>
+            {{ form.username.label }}<br>
+            {{ form.username(size=32) }}
+            {% for error in form.username.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>
+            {{ form.password.label }}<br>
+            {{ form.password(size=32) }}
+            {% for error in form.password.errors %}
+            <span style="color: red;">[{{ error }}]</span>
+            {% endfor %}
+        </p>
+        <p>{{ form.remember_me() }} {{ form.remember_me.label }}</p>
+        <p>{{ form.submit() }}</p>
+    </form>
+{% endblock %}
+```
+其中**form.hidden_tag()**模板参数生成一个隐藏字段，其中包括了用来防止CSRF攻击形式的令牌。同时还需要配置好SECRET_KEY的值。
+>app/routes.py: 接受登录凭据
+```python
+from flask import render_template, flash, redirect, url_for
+from app import app
+from app.forms import LoginForm
+
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    form = LoginForm()
+    if form.validate_on_submit():
+        flash('Login requested for user {}, remember_me={}'.format(
+            form.username.data, form.remember_me.data
+        ))
+        return redirect(url_for('index'))
+    return render_template('login.html', title='登录', form=form)
+```
+通过**form.validate_on_submit()**来判断表单是否正常提交。
+
+flash()函数可以存储消息，可以在网页中调用它。
+>app/templates/base.html:基本模板中的闪烁消息
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    {% if title %}
+    <title>{{ title }} - Microblog</title>
+    {% else %}
+    <title>Welcome to Microblog!</title>
+    {% endif %}
+</head>
+<body>
+    <div>
+        博客： 
+        <a href="{{ url_for('index') }}">首页</a>
+        <a href="{{ url_for('login') }}">登录</a>
+    </div>
+    <hr>
+    {% with messages = get_flashed_messages() %}
+    {% if messages %}
+    <ul>
+        {% for message in messages %}
+        <li>{{ message }}</li>
+        {% endfor %}
+    </ul>
+    {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+</body>
+</html>
+```
+通过**with**来创建局部变量。
+### 第四章 数据库
+在本章的教学中，新增了两个Flask扩展，SQLAlchemy和Flask-Migrate。
+> 安装命令
+```
+(venv) $ pip install flask-sqlalchemy
+(venv) $ pip install flask-migrate
+```
+SQLAlchemy扩展它是一个ORM，运行应用程序使用高级实体来管理数据库，而不是表或SQL。ORM的工作就是将高级操作转为数据库命令。SQLAlchemy的好处在于它不仅仅是一个ORM，还是许多的关系数据库。它支持一长串数据库引擎，包括MySql,PostgreSQL和SQLite。本项目就是采用的**SQLite数据库** 。
+
+Flask-Migrate扩展是SQLAlchemy的数据库迁移框架。解决在应用程序需要更改或增长时对现有数据库进行更新的问题。
+
+> microblog/config.py: Flask-SQLAlchemy配置
+```python
+import os
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+class Config(object):
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'you-will-never-guess'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
+        'sqlite:///' + os.path.join(basedir, 'app.db')
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
+```
+Flask-SQLAlchemy扩展是从SQLALCHEMY_DATABASE_URI配置变量中获取数据库的位置。
+>app/__init__.py:Flask-SQLAlchemy和Flask-Migrate初始化
+```python
+from flask import Flask
+from config import Config
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+
+app = Flask(__name__)
+app.config.from_object(Config)
+db = SQLAlchemy(app)
+migrate = Migrate(app, db)
+
+from app import routes, models
+```
+>创建迁移数据库
+```
+(venv) $ flask db init
+```
+>数据库迁移
+```
+(venv) $ flask db migrate -m "users table"
+```
+该命令不对数据库进行任何更改，只生成迁移脚本。
+
+执行下面命令才将更改应用于数据库
+```
+(venv) $ flask db upgrade
+```
+> 注：flask db upgrade 是更新数据库。flask db downgrade 是撤销上次迁移
+
+下面是数据库表和关系模块
+>app/models.py: 发布数据库表和关系
+```python
+from datetime import datetime
+from app import db
+
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), index=True, unique=True)
+    email = db.Column(db.String(120), index=True, unique=True)
+    password_hash = db.Column(db.String(128))
+    posts = db.relationship('Post', backref='author', lazy='dynamic')
+
+    def __repr__(self):
+        return '<User {}>'.format(self.username)
+
+
+class Post(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    body = db.Column(db.String(140))
+    timestamp = db.Column(db.DateTime, index=True, default=datetime.utcnow)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+
+    def __repr__(self):
+        return '<Post {}>'.format(self.body)
+```
+该user_id字段初始化为外键user.id，这意味着它引用idusers表中的值。在此引用中，该user部分是模型的数据库表的名称。这是一个不幸的不一致，在某些情况下，例如在db.relationship()调用中，模型由模型类引用，模型类通常以大写字符开头，而在其他情况下，例如此db.ForeignKey()声明，模型由其数据库表名称给出，SQLAlchemy自动使用小写字符，对于多字模型名称，使用蛇形。
+
+该User班有一个新的posts领域，是与初始化db.relationship。这不是一个实际的数据库字段，而是用户和帖子之间关系的高级视图，因此它不在数据库图中。对于一对多关系，db.relationship字段通常在“一”侧定义，并且用作访问“许多”的便捷方式。因此，例如，如果我有一个用户存储u，表达式u.posts将运行一个数据库查询，返回该用户写的所有帖子。第一个参数db.relationship是表示关系“多”面的模型类。如果模型稍后在模块中定义，则此参数可以作为带有类名的字符串提供。该backrefargument定义将添加到“many”类的对象的字段的名称，该类指向“one”对象。这将添加一个post.author表达式，该表达式将返回给定帖子的用户。该lazy参数定义了如何发布关系的数据库查询。
+
+可以使用**flask shell**在应用程序的上下文中启动Python解释器。在microblog.py中构建shell上下文。
+> microblog/microblog.py: 配置flask shell
+```python
+from app import app, db
+from app.models import User, Post
+
+@app.shell_context_processor
+def make_shell_context():
+    return {'db': db, 'User': User, 'Post':Post}
+```
+这样可以无需导入即可使用数据库实体。

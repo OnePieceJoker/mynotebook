@@ -5,6 +5,9 @@
     "sub_directories": [
         {
             "name": "groupManage"
+        },
+        {
+            "name": "python"
         }
     ],
     "version": "1"
